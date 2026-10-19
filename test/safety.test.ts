@@ -191,6 +191,24 @@ describe('secret redaction (AC-4.1)', () => {
     expect(sanitizeEndpoint(undefined)).toBe('(no endpoint configured)');
   });
 
+  it('sanitizeEndpoint drops a query-embedded credential when the URL has no scheme', () => {
+    // No "//" after the colon-less host means new URL() throws instead of
+    // parsing it, which used to fall through to redactSecrets alone: a
+    // plain-shaped credential in the query string matched no pattern and
+    // came back verbatim.
+    const out = sanitizeEndpoint('example.com/v1?key=plainSecretValue123');
+    expect(out).not.toContain('plainSecretValue123');
+  });
+
+  it('sanitizeEndpoint drops userinfo when the URL has no "//" authority', () => {
+    // A string like "admin:hunter2pass@myhost:8080/v1" parses as an opaque
+    // scheme:path URL (origin "null"), and the old code trusted that parse
+    // unconditionally, handing the password straight back in u.pathname.
+    const out = sanitizeEndpoint('admin:hunter2pass@myhost:8080/v1');
+    expect(out).not.toContain('hunter2pass');
+    expect(out).toContain('myhost:8080/v1');
+  });
+
   it('formatCliError redacts a key-shaped string reaching an error message', () => {
     const out = formatCliError(new Error('upstream rejected key sk-abc123DEF456ghi789jkl012'));
     expect(out).toBe('upstream rejected key [REDACTED]');
@@ -198,6 +216,17 @@ describe('secret redaction (AC-4.1)', () => {
 
   it('formatCliError handles a thrown non-Error value', () => {
     expect(formatCliError('sk-abc123DEF456ghi789jkl012')).toBe('[REDACTED]');
+  });
+
+  it('cli.ts never prints a caught error without going through formatCliError', async () => {
+    // Nothing fails the suite if a new subcommand's catch block reverts to
+    // the raw idiom: the redaction only holds if every catch site in cli.ts
+    // routes through formatCliError. This scans the source so a future
+    // console.error((err as Error).message) or console.error(err.message)
+    // gets caught here instead of silently reopening the stderr boundary.
+    const src = await readFile(path.join(process.cwd(), 'src', 'cli.ts'), 'utf8');
+    expect(src).not.toMatch(/console\.error\(\(err as Error\)\.message\)/);
+    expect(src).not.toMatch(/console\.error\(err\.message\)/);
   });
 });
 
