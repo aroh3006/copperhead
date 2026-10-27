@@ -548,3 +548,27 @@ describe('interactive chrome theme (AC-8.8/8.9)', () => {
     r.finish('done');
   });
 });
+
+describe('a provider error carrying a key (review of #372)', () => {
+  it('reaches neither the progress log nor the RunResult unredacted', async () => {
+    const { repo, cleanup } = await tempFixtureRepo();
+    try {
+      const key = 'sk-proj-abc123DEF456ghi789jkl012mno345';
+      const lines: string[] = [];
+      const provider: Provider = {
+        name: 'scripted',
+        chat: async () => {
+          throw new Error(`401 Incorrect API key provided: ${key}`);
+        },
+      };
+      const res = await runAgentLoop(loopOpts(repo, provider, lines, { maxTurns: 2 }));
+      expect(res.outcome).toBe('failure');
+      expect(res.exitPath).toBe('provider-error');
+      expect(lines.join('\n')).toContain('run failed: provider error: 401 Incorrect API key provided');
+      expect(lines.join('\n')).not.toContain(key);
+      expect(JSON.stringify(res)).not.toContain(key);
+    } finally {
+      await cleanup();
+    }
+  });
+});

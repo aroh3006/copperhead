@@ -209,6 +209,21 @@ describe('secret redaction (AC-4.1)', () => {
     expect(out).toContain('myhost:8080/v1');
   });
 
+  it('sanitizeEndpoint drops userinfo behind a non-special scheme, a bare "//", or a "/" in the password', () => {
+    // None of these parse to a real origin, and the old structural strip only
+    // fired when no "/" came before the "@", so each one came back with the
+    // password still in it.
+    const custom = sanitizeEndpoint('custom://admin:secretPW99@host/v1?key=q');
+    expect(custom).not.toContain('secretPW99');
+    expect(custom).toBe('custom://host/v1');
+    const bare = sanitizeEndpoint('//admin:secretPW99@host/v1');
+    expect(bare).not.toContain('secretPW99');
+    expect(bare).toBe('//host/v1');
+    const slashed = sanitizeEndpoint('admin:pa/ss123secret@myhost:8080/v1');
+    expect(slashed).not.toContain('ss123secret');
+    expect(slashed).toBe('myhost:8080/v1');
+  });
+
   it('formatCliError redacts a key-shaped string reaching an error message', () => {
     const out = formatCliError(new Error('upstream rejected key sk-abc123DEF456ghi789jkl012'));
     expect(out).toBe('upstream rejected key [REDACTED]');

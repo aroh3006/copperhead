@@ -59,5 +59,5 @@ export function sanitizeEndpoint(url: string | undefined): string {
   } catch {
     // fall through to the structural strip below
   }
-  return redactSecrets(url.replace(/[?#].*$/s, '').replace(/^[^/]*@/, ''));
+  return redactSecrets(url.replace(/[?#].*$/s, '').replace(/^((?:[A-Za-z][A-Za-z0-9+.-]*:)?\/\/)?[^?#]*@/, '$1'));
 }

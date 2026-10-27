@@ -26,7 +26,7 @@ import { ObligationsLedger } from './ledger.js';
 import { markTouched } from '../capabilities/helpers.js';
 import { gitPreflight, isDirty, snapshot, restore, commitAll, changedFiles, preserveFailedRun } from '../util/git.js';
 import { withRetry, isRateLimit, sessionLimit } from '../util/retry.js';
-import { sanitizeEndpoint } from '../util/redact.js';
+import { redactSecrets, sanitizeEndpoint } from '../util/redact.js';
 import { openspecArchive } from '../openspec/cli.js';
 import { existsSync } from 'node:fs';
 import { OpenAIProvider } from './providers/openai.js';
@@ -121,8 +121,8 @@ export async function makeProvider(
     if (!compatModel) {
       // sanitizeEndpoint, not the raw settings.baseURL: some endpoints embed
       // a credential in the URL itself (Gemini's compat endpoint does this
-      // with ?key=...), and this message reaches the user's terminal
-      // unredacted (cli.ts prints a caught error's .message directly).
+      // with ?key=...). This message reaches the terminal, and formatCliError's
+      // pattern redaction cannot catch a URL credential with no known key shape.
       throw new Error(
         settings.baseURL
           ? `compat requires a model id; use "compat:<model-id>" (endpoint ${sanitizeEndpoint(settings.baseURL)} is configured, but has no default model)`
@@ -248,7 +248,7 @@ export async function runAgentLoop(opts: RunOptions): Promise<RunResult> {
 
 async function runWithProviders(opts: RunOptions, providers: Set<Provider>): Promise<RunResult> {
   const r = opts.renderer ?? plainRenderer(opts.log ?? ((l: string) => console.log(l)));
-  const log = (l: string): void => r.log(l);
+  const log = (l: string): void => r.log(redactSecrets(l));
   const repoRoot = opts.repoRoot;
   const config = await loadConfig(repoRoot);
   const maxTurns = opts.maxTurns ?? config.maxTurns;
@@ -466,7 +466,7 @@ async function runWithProviders(opts: RunOptions, providers: Set<Provider>): Pro
     return {
       outcome: 'failure',
       exitPath,
-      summary: reason,
+      summary: redactSecrets(reason),
       transcriptDir: transcript.dir,
       filesTouched: [],
       commit: null,
